@@ -10,6 +10,10 @@ AIRPORTS = {"Delhi": "DEL", "Mumbai": "BOM", "Bangalore": "BLR", "Hyderabad": "H
             "Chennai": "MAA", "Kolkata": "CCU", "Ahmedabad": "AMD"}
 
 
+def provider_configured():
+    return bool(os.getenv("IARA_GOOGLE_FLIGHTS_QUOTE_URL") and os.getenv("IARA_GOOGLE_FLIGHTS_FARE_BASIS"))
+
+
 def observation(origin, destination, departure, cabin, option):
     url = os.getenv("IARA_GOOGLE_FLIGHTS_QUOTE_URL")
     basis = os.getenv("IARA_GOOGLE_FLIGHTS_FARE_BASIS")

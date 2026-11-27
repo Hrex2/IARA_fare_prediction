@@ -81,3 +81,32 @@ def test_observation_accepts_only_exact_matches(monkeypatch):
             return quotes.httpx.Response(200, request=response.request, json={**response.json(), key: bad})
         monkeypatch.setattr(quotes.httpx, "get", mismatch)
         assert quotes.observation(*args) is None
+
+@pytest.mark.parametrize("view", ["week", "month"])
+def test_calendar_estimates_selected_day_once(view, monkeypatch):
+    calls = []
+    original = research.estimate
+
+    def tracked(*args):
+        calls.append(args[-1].isoformat())
+        return original(*args)
+
+    monkeypatch.setattr(research, "estimate", tracked)
+    response = client.get("/api/fares", params={**SEARCH, "view": view})
+    assert response.status_code == 200
+    assert calls.count(SEARCH["departure"]) == 1
+
+
+@pytest.mark.parametrize("replay", [False, True])
+def test_skipped_observation_performs_no_inference(monkeypatch, replay):
+    monkeypatch.delenv("IARA_GOOGLE_FLIGHTS_QUOTE_URL", raising=False)
+    params = {**SEARCH, "searched": "2026-11-01", "departure": "2026-11-12"}
+    if replay:
+        params = SEARCH
+        monkeypatch.setenv("IARA_GOOGLE_FLIGHTS_QUOTE_URL", "https://example.invalid")
+        monkeypatch.setenv("IARA_GOOGLE_FLIGHTS_FARE_BASIS", "adult")
+    calls = []
+    monkeypatch.setattr(research, "estimate", lambda *args: calls.append(args))
+    response = client.get("/api/observation", params=params)
+    assert response.status_code == 200 and response.json() is None
+    assert calls == []

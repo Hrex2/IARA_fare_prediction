@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import research as r
-from .quotes import observation
+from .quotes import observation, provider_configured
 
 @asynccontextmanager
 async def lifespan(_app):
@@ -35,7 +35,7 @@ def config():
 def search_data(origin, destination, cabin, searched, departure, view):
     try:
         options = r.estimate(origin, destination, cabin, searched, departure)
-        days = r.calendar(origin, destination, cabin, searched, departure, view) if view != "day" else []
+        days = r.calendar(origin, destination, cabin, searched, departure, view, options) if view != "day" else []
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     except LookupError as error:
@@ -51,6 +51,8 @@ def fares(origin: str, destination: str, cabin: str, searched: date, departure: 
 
 @app.get("/api/observation")
 def quote(origin: str, destination: str, cabin: str, searched: date, departure: date, option: int = 0):
+    if searched == r.BOOKING or not provider_configured():
+        return None
     options = search_data(origin, destination, cabin, searched, departure, "day")["options"]
     if not 0 <= option < len(options):
         return None
