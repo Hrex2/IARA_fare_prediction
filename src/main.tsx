@@ -15,7 +15,7 @@ type Reveal = {prediction:number; recorded:number; difference:number};
 type Quote = {fare:number; source:string; observedAt:string};
 const modelName = 'Stage 3 · L7 Random Forest';
 const money = (amount:number) => new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(amount);
-const shortDate = (value:string) => new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(value));
+const shortDate = (value:string) => !value ? '' : new Intl.DateTimeFormat('en-IN',{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(value));
 function addDays(value:string, days:number){const date=new Date(value);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10);}
 function currentPage():Page {const value=location.hash.slice(1);return value==='research'||value==='explore'?value:'home';}
 function url(path:string, query:Record<string,string>){return '/api/'+path+'?'+new URLSearchParams(query);}
@@ -37,14 +37,18 @@ function useResource<T>(path:string|null){
 
 function Navigation({page}:{page:Page}){
   return <header className={s.header}><a href="#home" className={s.brand}><Plane size={31} fill="currentColor"/> IARA</a>
-    {page==='home'?<a className={s.moon} href="#explore" title="Explore fares"><Moon size={17}/> <span>Explore</span></a>:
+    {page==='home'?<a className={s.moon} href="#explore" title="Explore fares" onClick={event=>{
+      const form=document.querySelector<HTMLFormElement>("#fare-search");
+      if(!form?.reportValidity()) event.preventDefault();
+    }}><Moon size={17}/> <span>Explore</span></a>:
       <nav aria-label="Main navigation"><a aria-current={page==='explore'?'page':undefined} href="#explore">Explore Fares</a><a aria-current={page==='research'?'page':undefined} href="#research">Research</a><a className={s.homeLink} href="#home"><House size={17}/> Home</a></nav>}
   </header>;
 }
 
 function SearchCard({query,config,change,submit}:{query:Query;config:Config;change:(value:Query)=>void;submit:()=>void}){
+  const [invalid,setInvalid]=useState(false);
   const field=(key:keyof Query,value:string)=>change({...query,[key]:value});
-  return <form className={s.searchCard} onSubmit={event=>{event.preventDefault();submit();}}>
+  return <form id="fare-search" className={s.searchCard} onInvalid={()=>setInvalid(true)} onSubmit={event=>{event.preventDefault();submit();}}>
     <div className={s.searchFields}>
       <label><PlaneTakeoff/><span>From<select value={query.origin} onChange={e=>field('origin',e.target.value)}>{config.cities.map(city=><option key={city}>{city}</option>)}</select></span></label>
       <button className={s.swap} type="button" aria-label="Swap origin and destination" onClick={()=>change({...query,origin:query.destination,destination:query.origin})}><ArrowLeftRight size={18}/></button>
@@ -52,6 +56,7 @@ function SearchCard({query,config,change,submit}:{query:Query;config:Config;chan
       <label className={s.dateField}><CalendarDays/><span>Departure date<input type="date" required value={query.departure} min={addDays(query.searched,1)} max={addDays(query.searched,config.horizon)} onChange={e=>field('departure',e.target.value)}/></span></label>
       <label className={s.cabinField}><Ticket/><span>Flight class<select value={query.cabin} onChange={e=>field('cabin',e.target.value)}>{config.cabins.map(cabin=><option key={cabin}>{cabin}</option>)}</select></span></label>
     </div>
+    {invalid && !query.departure && <p role="alert">Choose a departure date.</p>}
     <button className={s.primary} type="submit"><SearchIcon size={20}/>Estimate fares</button>
     <div className={s.searchNote}><span>Search date {shortDate(query.searched)} {query.searched.slice(0,4)} · 1–{config.horizon} days ahead</span>
     <button type="button" onClick={()=>{const historical=query.searched!==config.researchDate;change({...query,searched:historical?config.researchDate:config.today,departure:historical?addDays(config.researchDate,12):config.defaultDeparture});}}>{query.searched===config.researchDate?'Use current dates':'Replay 2023 data'}</button></div>
@@ -100,7 +105,7 @@ function Research({config}:{config:Config}){
   const clear=()=>{setError('');setRevealed(undefined);};
   async function chooseRandom(){
     clear();setRandomLoading(true);
-    try{const rows=await request<Example[]>(url('examples',{partition,random:'true'}));setRandom(rows[0]??null);}
+    try{const rows=await request<Example[]>(url('examples',{partition,query:filter,random:'true'}));setRandom(rows[0]??null);}
     catch(e){setError((e as Error).message);}finally{setRandomLoading(false);}
   }
   async function reveal(){
@@ -147,7 +152,7 @@ function RouteMap({query}:{query:Query}){
     </svg>{active&&<button className={s.mapNote} onClick={()=>setActive(null)}><MapPin size={15}/>{active==='origin'?'Origin':'Destination'} · {query[active]} ({airports[query[active]][0]}) <span aria-hidden="true">×</span></button>}</div>;
 }
 
-function Explore({query,change}:{query:Query;change:(query:Query)=>void}){
+function Explore({query,change,historical}:{historical:boolean;query:Query;change:(query:Query)=>void}){
   const [view,setView]=useState<View>('day');
   const [mode,setMode]=useState<'route'|'flight'>('route');
   const [selection,setSelection]=useState<{date:string;index:number}>();
@@ -155,7 +160,7 @@ function Explore({query,change}:{query:Query;change:(query:Query)=>void}){
   const options=result.data?.options??[];
   const index=mode==='flight'&&selection?.date===query.departure?selection.index:0;
   const option=options[index];
-  const quote=useResource<Quote|null>(option?url('observation',{...query,option:String(index)}):null);
+  const quote=useResource<Quote|null>(option&&!historical?url('observation',{...query,option:String(index)}):null);
   const flightLink='https://www.google.com/travel/flights?'+new URLSearchParams({q:'Flights from '+query.origin+' to '+query.destination+' on '+query.departure+' '+query.cabin,curr:'INR'});
   const max=Math.max(1,...(result.data?.days.map(day=>day.fare??0)??[]));
   return <main className={s.nightMain}>
@@ -168,7 +173,7 @@ function Explore({query,change}:{query:Query;change:(query:Query)=>void}){
       <div className={s.exploreStack}>
         <section className={s.panel}><div className={s.panelHeading}><h2>Price comparison</h2><small>{shortDate(query.departure)}</small></div>
           {result.error||!result.data?<Status error={result.error}>Loading fare estimates…</Status>:!option?<Status>No reference options for this departure date.</Status>:<>
-            <div className={s.compare}><div><span><Layers size={18}/> IARA estimate</span><strong>{money(option.fare)}</strong><small>{mode==='route'?'Lowest for this route':option.airline+(option.flight?' · '+option.flight:'')}</small></div><div><span><span className={s.google}>G</span> Google Flights</span><strong aria-label="Observed Google Flights fare">{quote.data?money(quote.data.fare):''}</strong>{quote.data?<small>{quote.data.source} · {new Date(quote.data.observedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})} IST</small>:<a href={flightLink} target="_blank" rel="noreferrer">Check on Google Flights</a>}</div></div>
+            <div className={s.compare}><div><span><Layers size={18}/> IARA estimate</span><strong>{money(option.fare)}</strong><small>{mode==='route'?'Lowest for this route':option.airline+(option.flight?' · '+option.flight:'')}</small></div><div><span><span className={s.google}>G</span> Google Flights</span><strong aria-label="Observed Google Flights fare">{quote.data?money(quote.data.fare):''}</strong>{quote.data?<small>{quote.data.source} · {new Date(quote.data.observedAt).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})} IST</small>:historical?<small>Historical search · no archived quote</small>:<a href={flightLink} target="_blank" rel="noreferrer">Check on Google Flights</a>}</div></div>
             {quote.data&&<p>Estimate minus observed fare <strong>{money(option.fare-quote.data.fare)}</strong></p>}
           </>}
         </section>
@@ -197,7 +202,7 @@ function App(){
   return <div className={page==='home'?s.day:s.night}><Navigation page={page}/>
     {!config.data||!query||!search?<main className={s.nightMain}><Status error={config.error}>Loading research data…</Status></main>:
       page==='home'?<Home config={config.data} query={query} change={value=>{setDraft(value);setSubmitted(null);}} submitted={submitted} submit={()=>setSubmitted(query)}/>:
-      page==='research'?<Research config={config.data}/>:<Explore query={search} change={value=>{setDraft(value);setSubmitted(value);}}/>}
+      page==='research'?<Research config={config.data}/>:<Explore historical={search.searched===config.data.researchDate} query={search} change={value=>{setDraft(value);setSubmitted(value);}}/>}
   </div>;
 }
 createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);

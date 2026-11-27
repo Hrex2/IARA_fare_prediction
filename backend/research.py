@@ -73,7 +73,7 @@ def estimate(origin, destination, cabin, searched, departure):
     ]
 
 
-def calendar(origin, destination, cabin, searched, departure, view):
+def calendar(origin, destination, cabin, searched, departure, view, selected_options):
     if not 1 <= (departure - searched).days <= HORIZON:
         raise ValueError("Choose a departure 1 to 40 days after the search date.")
     if view == "week":
@@ -87,7 +87,7 @@ def calendar(origin, destination, cabin, searched, departure, view):
     result = []
     for offset in range((last - first).days + 1):
         day = first + timedelta(days=offset)
-        options = estimate(origin, destination, cabin, searched, day)
+        options = selected_options if day == departure else estimate(origin, destination, cabin, searched, day)
         result.append({"date": day.isoformat(), "fare": options[0]["fare"] if options else None})
     return result
 
