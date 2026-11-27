@@ -37,7 +37,7 @@ function useResource<T>(path:string|null){
 
 function Navigation({page}:{page:Page}){
   return <header className={s.header}><a href="#home" className={s.brand}><Plane size={31} fill="currentColor"/> IARA</a>
-    {page==='home'?<a className={s.moon} href="#explore" title="Explore fares"><Moon size={17}/> <span>Explore</span></a>:
+    {page==='home'?<nav aria-label="Main navigation"><a href="#research">Research</a><a className={s.moon} href="#explore"><Moon size={17}/> Explore</a></nav>:
       <nav aria-label="Main navigation"><a aria-current={page==='explore'?'page':undefined} href="#explore">Explore Fares</a><a aria-current={page==='research'?'page':undefined} href="#research">Research</a><a className={s.homeLink} href="#home"><House size={17}/> Home</a></nav>}
   </header>;
 }
@@ -66,11 +66,28 @@ function OptionList({options,choose,selected}:{options:Option[];choose?:(index:n
 }
 function OptionText({option}:{option:Option}){return <><span><strong>{option.airline}{option.flight?' · '+option.flight:''}</strong><small>{option.duration.toLocaleString('en-IN',{maximumFractionDigits:2})} h · Reference {shortDate(option.referenceDate)}</small></span><b>{money(option.fare)}</b></>;}
 
-function Home({config,query,change,submitted,submit}:{config:Config;query:Query;change:(value:Query)=>void;submitted:Query|null;submit:()=>void}){
+function NearbyDates({query, config, select}: {query: Query; config: Config; select: (date: string) => void}) {
+  const supported = query.origin !== query.destination && query.departure >= addDays(query.searched, 1)
+    && query.departure <= addDays(query.searched, config.horizon);
+  const week = useResource<Fares>(supported ? url('fares', {...query, view: 'week'}) : null);
+  if (!supported) return null;
+  return <section className={s.nearby} aria-labelledby="nearby-title">
+    <div className={s.sectionHeading}><div><h2 id="nearby-title">Compare nearby dates</h2>
+      <p>{query.origin} to {query.destination} · {query.cabin}</p></div><span>Lowest estimates · INR</span></div>
+    {week.data ? <div className={s.dateStrip}>{week.data.days.map(day =>
+      <button key={day.date} type="button" disabled={day.fare === null}
+        aria-pressed={day.date === query.departure} onClick={() => select(day.date)}>
+        <span>{new Intl.DateTimeFormat('en-IN', {weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(day.date))}</span>
+        <strong>{day.fare === null ? 'Unavailable' : money(day.fare)}</strong>
+      </button>)}</div> : <Status error={week.error}>Loading nearby dates…</Status>}
+  </section>;
+}
+
+function Home({config,query,change,submitted,submit}:{config:Config;query:Query;change:(value:Query)=>void;submitted:Query|null;submit:(value:Query)=>void}){
   const result=useResource<Fares>(submitted?url('fares',submitted):null);
   const options=result.data?.options??[];
-  return <main className={s.dayMain}><div className={s.hero}><div className={s.heroText}><p className={s.eyebrow}><span/> FLIGHT FARE RESEARCH</p><h1>Estimate your fare</h1><p>Compare model estimates for domestic routes across India.</p></div></div>
-    <div className={s.dayContent}><SearchCard query={query} config={config} change={change} submit={submit}/>
+  return <main className={s.dayMain}><div className={s.hero}><div className={s.heroText}><h1>Estimate your fare</h1><p>Compare flights and departure dates across India.</p></div></div>
+    <div className={s.dayContent}><SearchCard query={query} config={config} change={change} submit={()=>submit(query)}/>
     {submitted&&<section className={s.homeResults} aria-label="Fare results">
       {result.error||!result.data?<Status error={result.error}>Estimating fares…</Status>:options.length===0?<Status>No reference options for this departure date.</Status>:<>
         <div className={s.fareSummary}>
@@ -80,6 +97,7 @@ function Home({config,query,change,submitted,submit}:{config:Config;query:Query;
         <div className={s.lightPanel}><div className={s.panelHeading}><h2>{submitted.origin} <ArrowRight size={18}/> {submitted.destination}</h2><a href="#explore">Explore fares</a></div><p>{shortDate(submitted.departure)} · {submitted.cabin} · Historical reference options with no booking availability</p>{options.length>1&&<details><summary>View all {options.length} options</summary><OptionList options={options}/></details>}</div>
       </>}
     </section>}
+    <NearbyDates query={query} config={config} select={departure=>{const next={...query,departure};change(next);submit(next);}}/>
     <footer className={s.footer}>{modelName}<a href="#research">Research and evaluation</a></footer></div>
   </main>;
 }
@@ -196,7 +214,7 @@ function App(){
   const search=submitted??query;
   return <div className={page==='home'?s.day:s.night}><Navigation page={page}/>
     {!config.data||!query||!search?<main className={s.nightMain}><Status error={config.error}>Loading research data…</Status></main>:
-      page==='home'?<Home config={config.data} query={query} change={value=>{setDraft(value);setSubmitted(null);}} submitted={submitted} submit={()=>setSubmitted(query)}/>:
+      page==='home'?<Home config={config.data} query={query} change={value=>{setDraft(value);setSubmitted(null);}} submitted={submitted} submit={setSubmitted}/>:
       page==='research'?<Research config={config.data}/>:<Explore query={search} change={value=>{setDraft(value);setSubmitted(value);}}/>}
   </div>;
 }
