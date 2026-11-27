@@ -48,3 +48,26 @@ test('desktop search supports current dates',async({page})=>{
   await expect(page.getByText(/Historical reference options with no booking availability/)).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(1366);
 });
+
+test('random examples use the applied filter and partition', async ({page})=>{
+  await page.goto('/#research');
+  await page.getByLabel('Evaluation partition').selectOption('extrapolation');
+  const filter=page.getByLabel('Find an example');
+  await filter.fill('Mumbai');
+  await page.getByRole('button',{name:'Find examples'}).click();
+  await filter.fill('unapplied edit');
+  const pending=page.waitForRequest(request=>request.url().includes('random=true'));
+  await page.getByRole('button',{name:'Random example'}).click();
+  const params=new URL((await pending).url()).searchParams;
+  expect(params.get('query')).toBe('Mumbai');
+  expect(params.get('partition')).toBe('extrapolation');
+  await expect(page.getByLabel('Held-out example')).toHaveValue('random');
+  await page.getByRole('button',{name:'Predict and reveal'}).click();
+  await expect(page.getByText('Recorded dataset fare',{exact:true})).toBeVisible();
+  await filter.fill('no matching route xyz');
+  await page.getByRole('button',{name:'Find examples'}).click();
+  await page.getByRole('button',{name:'Random example'}).click();
+  await expect(page.getByRole('option',{name:'No matching examples'})).toHaveCount(1);
+  await expect(page.getByRole('button',{name:'Predict and reveal'})).toBeDisabled();
+  await expect(page.getByText('Recorded dataset fare',{exact:true})).toHaveCount(0);
+});

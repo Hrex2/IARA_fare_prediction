@@ -100,7 +100,7 @@ function Research({config}:{config:Config}){
   const clear=()=>{setError('');setRevealed(undefined);};
   async function chooseRandom(){
     clear();setRandomLoading(true);
-    try{const rows=await request<Example[]>(url('examples',{partition,random:'true'}));setRandom(rows[0]??null);}
+    try{const rows=await request<Example[]>(url('examples',{partition,query:filter,random:'true'}));setRandom(rows[0]??null);}
     catch(e){setError((e as Error).message);}finally{setRandomLoading(false);}
   }
   async function reveal(){
