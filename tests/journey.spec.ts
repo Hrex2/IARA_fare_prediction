@@ -16,11 +16,8 @@ test('home, calendar and research remain usable on a narrow screen',async({page}
   const minimum=await day.locator('span').innerText();
   await day.click();
   await expect(page.getByRole('heading',{name:'Price comparison'}).locator('..').locator('..').getByText(minimum,{exact:true})).toBeVisible();
-  const googleFlights=page.getByRole('link',{name:'Check on Google Flights'});
-  await expect(googleFlights).toBeVisible();
-  const lookup=new URL((await googleFlights.getAttribute('href'))!);
-  expect(lookup.origin).toBe('https://www.google.com');
-  expect(lookup.searchParams.get('q')).toBe('Flights from Mumbai to Delhi on 2023-01-23 Economy');
+  await expect(page.getByText('Historical search · no archived quote')).toBeVisible();
+  await expect(page.getByRole('link',{name:'Check on Google Flights'})).toHaveCount(0);
   await expect(page.getByLabel('Observed Google Flights fare')).toBeEmpty();
   await expect(page.getByText('Estimate minus observed fare')).toHaveCount(0);
   await page.getByRole('button',{name:'Day',exact:true}).click();
@@ -47,6 +44,29 @@ test('desktop search supports current dates',async({page})=>{
   await expect(page.getByText('Lowest estimate',{exact:true})).toBeVisible();
   await expect(page.getByText(/Historical reference options with no booking availability/)).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(1366);
+});
+
+test('Explore validates the draft and opens a current journey before estimation', async ({page})=>{
+  await page.goto('/');
+  const date = page.getByLabel('Departure date');
+  const valid = await date.inputValue();
+  const explore = page.getByRole('link',{name:'Explore',exact:true});
+  await date.fill('');
+  await explore.click();
+  await expect(page.getByText('Choose a departure date.',{exact:true})).toBeVisible();
+  await expect(date).toBeFocused();
+  await date.fill('2099-01-01');
+  await explore.click();
+  await expect(date).toBeFocused();
+  await expect(page.getByRole('heading',{name:'Estimate your fare'})).toBeVisible();
+  await date.fill(valid);
+  await page.getByRole('combobox',{name:'Flight class'}).selectOption('Business');
+  await explore.click();
+  const link = page.getByRole('link',{name:'Check on Google Flights'});
+  await expect(link).toBeVisible();
+  const target = new URL((await link.getAttribute('href'))!);
+  expect(target.origin).toBe('https://www.google.com');
+  expect(target.searchParams.get('q')).toBe('Flights from Delhi to Mumbai on '+valid+' Business');
 });
 
 test('random examples use the applied filter and partition', async ({page})=>{
