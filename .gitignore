@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.runtime/
+.venv/
+__pycache__/
+.pytest_cache/
+playwright-report/
+test-results/
+.env
+
+# Local credentials and caches
+.env.*
+!.env.example
+.venv*/
+venv/
+*.py[cod]
+.coverage*
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.aws/
+kaggle.json
+*.pem
+*.key
+
+# Original research inputs kept in the working folder
+/*.ipynb
+/IARA_stage*.zip
+/IARA flight fare predictor dashboard.png
